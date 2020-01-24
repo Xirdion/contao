@@ -823,24 +823,62 @@ class PageRegular extends Frontend
 				$noSearch = true;
 			}
 
+			// schema.org
+			$isPreview = System::getContainer()->get('contao.security.token_checker')->isPreviewMode();
+
 			$meta = array
 			(
-				'@context' => 'https://contao.org/',
-				'@type' => 'PageMetaData',
-				'pageId' => (int) $objPage->id,
-				'language' => $objPage->language,
-				'title' => $objPage->pageTitle ?: $objPage->title,
-				'noSearch' => $noSearch,
-				'protected' => (bool) $objPage->protected,
-				'groups' => array_map('intval', array_filter((array) $objPage->groups)),
-				'fePreview' => System::getContainer()->get('contao.security.token_checker')->isPreviewMode()
+				'@context' => 'https://schema.org/',
+				'@type' => 'WebPage',
+				'name' => $objPage->pageTitle ?: $objPage->title,
+				'description' => $objPage->description,
+				'identifier' => (int) $objPage->id,
+				'inLanguage' => $objPage->language,
+				'version' => $isPreview ? 'preview' : 'current',
 			);
 
+			// Mark searchable
+			if (!$noSearch)
+			{
+				$meta['potentialAction']['@type'] = 'SearchAction';
+			}
+
+			// Mark protected
+			if ($objPage->protected)
+			{
+				$meta['conditionsOfAccess'] = 'Accessible only from logged-in accounts';
+			}
+
+			// Audience
+			$audience = array();
+
+			$groups = array_map('intval', array_filter((array) $objPage->groups));
+			if (!empty($groups))
+			{
+				$audience[] = array
+				(
+					'@type' => 'PeopleAudience',
+					'name' => 'groups',
+					'identifier' => $groups,
+				);
+			}
+
+			// Add member ID if logged in
 			$token = System::getContainer()->get('security.token_storage')->getToken();
 
 			if ($token !== null && $token->getUser() instanceof FrontendUser)
 			{
-				$meta['memberId'] = (int) $token->getUser()->id;
+				$audience[] = array
+				(
+					'@type' => 'PeopleAudience',
+					'name' => 'member',
+					'identifier' => (int) $token->getUser()->id,
+				);
+			}
+
+			if (!empty($audience))
+			{
+				$meta['audience'] = $audience;
 			}
 
 			$strScripts .= '<script type="application/ld+json">' . json_encode($meta) . '</script>';
